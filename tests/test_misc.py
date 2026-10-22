@@ -1,0 +1,39 @@
+import pytest
+
+from accounts.config import ConfigError, Settings
+from accounts.db import Database
+from accounts import ratelimit
+
+OK = dict(ACCOUNTS_ENV="production", ACCOUNTS_SECRET="x" * 40, ACCOUNTS_ENGINE_URL="https://ave.example",
+          ACCOUNTS_ENGINE_KEY="cle", ACCOUNTS_OTP_SENDER="webhook", ACCOUNTS_OTP_WEBHOOK_URL="https://sms.example/send")
+
+
+def test_production_config_ok():
+    s = Settings.from_env(dict(OK))
+    assert s.production and s.engine_url == "https://ave.example"
+
+
+@pytest.mark.parametrize("override", [
+    dict(ACCOUNTS_SECRET=""), dict(ACCOUNTS_SECRET="court"), dict(ACCOUNTS_ENGINE_URL="http://ave.example"),
+    dict(ACCOUNTS_ENGINE_URL=""), dict(ACCOUNTS_ENGINE_KEY=""), dict(ACCOUNTS_OTP_SENDER="console"),
+    dict(ACCOUNTS_OTP_WEBHOOK_URL=""), dict(ACCOUNTS_OTP_SENDER="pigeon"),
+], ids=["sans-secret", "secret-court", "moteur-http", "sans-moteur", "sans-cle", "console", "sans-webhook", "inconnu"])
+def test_production_config_refuses_unsafe_setups(override):
+    with pytest.raises(ConfigError):
+        Settings.from_env({**OK, **override})
+
+
+def test_dev_gets_an_ephemeral_secret_but_a_short_explicit_one_is_refused():
+    s = Settings.from_env({})
+    assert len(s.secret) >= 32 and not s.production
+    with pytest.raises(ConfigError):
+        Settings.from_env({"ACCOUNTS_SECRET": "court"})
+
+
+def test_rate_limit_window(tmp_path):
+    db = Database(str(tmp_path / "r.db"))
+    with db.connect() as c:
+        assert [ratelimit.hit(c, "k", 2, 60) for _ in range(2)] == [None, None]
+        wait = ratelimit.hit(c, "k", 2, 60)
+        assert wait is not None and 1 <= wait <= 60
+        assert ratelimit.hit(c, "autre", 2, 60) is None
