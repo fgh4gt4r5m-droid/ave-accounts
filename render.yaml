@@ -23,9 +23,9 @@ services:
       - key: ACCOUNTS_SECRET
         sync: false               # >= 32 caractères aléatoires ; le perdre ou le changer rompt tous les comptes
       - key: ACCOUNTS_ENGINE_URL
-        sync: false               # https://… du moteur AVE déployé (laisser VIDE tant qu'il ne l'est pas)
+        sync: false               # https://ave-engine.onrender.com (moteur en ligne depuis le 2026-10-23)
       - key: ACCOUNTS_ENGINE_KEY
-        sync: false               # clé B2B du tenant « AVE grand public » (VIDE tant que le moteur ne l'est pas)
+        sync: false               # clé du client « ave-grand-public » (tools/make_key.py du moteur)
       - key: ACCOUNTS_APPLE_AUDIENCE
         value: com.tam.ave
       - key: ACCOUNTS_APPLE_TEAM_ID

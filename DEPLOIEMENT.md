@@ -3,10 +3,20 @@
 Rédigé le 2026-10-23. Même compte Render que WoYo (`taksi-backend`), mais un **service séparé** : rien n'est modifié côté
 WoYo. **Aucun secret ne s'écrit dans ce dépôt ni dans une conversation** : on les colle directement dans Render.
 
+## Le moteur est en ligne (2026-10-23)
+Adresse vérifiée (`/healthz` répond `{"ok": true, "protocol": 1}`, `/v1/token` sans clé répond 401) :
+- `ACCOUNTS_ENGINE_URL` = **`https://ave-engine.onrender.com`**
+- `ACCOUNTS_ENGINE_KEY` = la **clé du client « ave-grand-public »** que vous avez générée avec `tools/make_key.py` du moteur
+  (la même opération qui a produit le bloc `tenants.json` du moteur). À coller dans Render, jamais ailleurs.
+
+Le moteur répond encore par écho avec un son de test, et l'apprentissage y est coupé : la suppression d'un compte le traite
+comme « rien à effacer » (`learning_disabled`), sans bloquer.
+
 ## Préproduction d'abord (`ACCOUNTS_ENV=preview`, réglage du blueprint depuis le 2026-10-23)
 Pour éprouver tout le parcours de connexion (vrai code par WhatsApp ou SMS, comptes réels) AVANT le déploiement du moteur :
 le service démarre sans moteur, avec les mêmes protections que la production (secret fixe obligatoire, codes jamais
-dans les journaux). `ACCOUNTS_ENGINE_URL` et `ACCOUNTS_ENGINE_KEY` restent VIDES. Ce qui ne marche pas encore, et le dit :
+dans les journaux). Sans moteur, `ACCOUNTS_ENGINE_URL` et `ACCOUNTS_ENGINE_KEY` restent vides (le moteur est maintenant en
+ligne : les renseigner, voir ci-dessus). Sans elles, ce qui ne marche pas, et le dit :
 - `/auth/token` répond `unavailable` (503) : aucun jeton de conversation sans moteur. Le build de démonstration de l'app
   converse alors avec son moteur de démo hors ligne, signalé à l'écran ;
 - supprimer un compte téléphone ou Apple répond `unavailable` (effacement côté moteur, révocation Apple sans clé) ;
