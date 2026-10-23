@@ -7,7 +7,7 @@ Il détient la clé B2B du tenant « AVE grand public » et appelle `POST /v1/to
 Spécification : `contrat/CONTRAT.md` §6 du dépôt `african-voice-engine` (contrat partagé app iOS ↔ moteur ↔ ce service). Les apps hôtes (WoYo, TaGa) n'utilisent pas ce service : leur backend appelle `/v1/token` lui-même.
 
 ```bash
-pip install -e '.[dev]' && python3 -m pytest      # 90 tests, < 5 s
+pip install -e '.[dev]' && python3 -m pytest      # 98 tests, < 5 s
 ACCOUNTS_ENV=dev ACCOUNTS_ENGINE_URL=http://127.0.0.1:8787 ACCOUNTS_ENGINE_KEY=<clé du tenant> python3 -m accounts   # :8790
 ```
 En dev, les codes sont écrits dans le journal (`console`) et le secret est éphémère. **En production** le service refuse de démarrer sans secret
@@ -30,6 +30,7 @@ En dev, les codes sont écrits dans le journal (`console`) et le secret est éph
 | `ACCOUNTS_OTP_SENDER=providers` + `ACCOUNTS_WHATSAPP_*`, `ACCOUNTS_ORANGE_*`, `ACCOUNTS_INFOBIP_*`, `ACCOUNTS_SMS_PROVIDERS` | envoi direct, même logique que taksi-backend : WhatsApp Cloud API (modèle d'authentification `ave_otp`), puis SMS Orange Guinée (numéros +224, 3 par jour), puis SMS Infobip (`/sms/2/text/advanced`) ; détail et correspondance des variables dans `DEPLOIEMENT.md` |
 | `ACCOUNTS_OTP_TEST_PHONES`, `ACCOUNTS_OTP_TEST_CODE` | numéros de test à code fixe (revue Apple) : aucun message envoyé ; code de 6 chiffres non évident obligatoire |
 | `ACCOUNTS_APPLE_AUDIENCE` | identifiant (bundle id) de l'app attendu dans le jeton Apple ; absent ⇒ Apple désactivé (503) |
+| `ACCOUNTS_APPLE_TEAM_ID`, `ACCOUNTS_APPLE_KEY_ID`, `ACCOUNTS_APPLE_PRIVATE_KEY_FILE` (ou `_PRIVATE_KEY`) | révocation Sign in with Apple à la suppression du compte (App Store, règle 5.1.1(v)) : clé « Sign in with Apple » (.p8) de l'équipe ; **obligatoire en production si Apple est activé** |
 | `ACCOUNTS_APPATTEST_APP_ID`, `ACCOUNTS_APPATTEST_ROOT_PEM`, `ACCOUNTS_APPATTEST_DEVELOPMENT=1` | invité : `<TEAM_ID>.<BUNDLE_ID>`, fichier PEM de la racine « Apple App Attestation Root CA » (à télécharger chez Apple), AAGUID de développement ; absents ⇒ invité désactivé (403) |
 | `ACCOUNTS_TRUST_PROXY=1` | lire l'IP dans `X-Forwarded-For` (derrière un reverse proxy de confiance uniquement) |
 
@@ -39,7 +40,7 @@ En dev, les codes sont écrits dans le journal (`console`) et le secret est éph
 - Limitation de débit (fenêtre glissante en base) par IP et par numéro, délai de renvoi, plafond de jetons par jour et par compte.
 - `sub` transmis au moteur : pseudonyme dérivé de l'identifiant de compte (jamais du numéro). **Pas de `sub` pour un invité** (décision produit : apprentissage réservé aux comptes identifiés).
 - Apple : signature RS256 (clés publiques d'Apple, en cache), émetteur, audience, expiration, nonce ; `HS256` refusé.
-- Déconnexion et suppression de compte (cascade : jetons, usage). Pas de documentation d'API exposée.
+- Déconnexion et suppression de compte (cascade : jetons, usage). Sign in with Apple : le code d'autorisation est échangé à la connexion, le jeton Apple gardé **chiffré** (AES-256-GCM, clé dérivée du secret) et **révoqué** avant la suppression ; échec de la révocation = compte conservé (503), l'utilisateur réessaie. Pas de documentation d'API exposée.
 
 ## Limites honnêtes (à lire avant toute mise en ligne)
 - **Envoi des codes** : WhatsApp (Meta), Orange et Infobip sont intégrés (2026-10-23) mais testés seulement contre des faux, d'après leur documentation publique ; **aucun envoi réel** n'a encore été fait. Coût et fiabilité à mesurer sur le terrain.

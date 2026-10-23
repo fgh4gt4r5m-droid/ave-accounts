@@ -21,6 +21,10 @@ class Settings:
     token_ttl_s: int = 600
     token_languages: tuple[str, ...] = ()      # restreint les langues du jeton (vide = celles du tenant)
     apple_audience: str | None = None          # identifiant de l'app (bundle id) attendu dans le jeton Apple
+    # Révocation Apple (App Store, règle 5.1.1(v)) : clé « Sign in with Apple » de l'équipe (.p8) — JAMAIS dans le dépôt.
+    apple_team_id: str | None = None
+    apple_key_id: str | None = None
+    apple_private_key: str | None = None       # contenu PEM du fichier .p8
     appattest_app_id: str | None = None        # « <TEAM_ID>.<BUNDLE_ID> »
     appattest_root_pem: bytes | None = None    # certificat racine « Apple App Attestation Root CA »
     appattest_development: bool = False        # accepte l'AAGUID de développement
@@ -70,6 +74,9 @@ class Settings:
                 raise ConfigError("production : ACCOUNTS_ENGINE_URL en https:// obligatoire")
             if not self.engine_key:
                 raise ConfigError("production : ACCOUNTS_ENGINE_KEY obligatoire")
+            if self.apple_audience and not self.apple_revocation_ready:
+                raise ConfigError("production : Sign in with Apple activé sans révocation (ACCOUNTS_APPLE_TEAM_ID, "
+                                  "ACCOUNTS_APPLE_KEY_ID, ACCOUNTS_APPLE_PRIVATE_KEY_FILE) : exigé par l'App Store")
             if self.otp_sender == "console":
                 raise ConfigError("production : l'envoi des codes par la console est interdit "
                                   "(ACCOUNTS_OTP_SENDER=providers ou webhook)")
@@ -92,6 +99,10 @@ class Settings:
         return self
 
     @property
+    def apple_revocation_ready(self) -> bool:
+        return bool(self.apple_audience and self.apple_team_id and self.apple_key_id and self.apple_private_key)
+
+    @property
     def whatsapp_ready(self) -> bool:
         return bool(self.whatsapp_token and self.whatsapp_phone_number_id)
 
@@ -111,12 +122,16 @@ class Settings:
         if not secret and env != "production":
             secret = secrets.token_urlsafe(48)  # dev : éphémère, les jetons ne survivent pas à un redémarrage
         root = g("ACCOUNTS_APPATTEST_ROOT_PEM")
+        apple_key_file = g("ACCOUNTS_APPLE_PRIVATE_KEY_FILE")
+        apple_key = Path(apple_key_file).read_text() if apple_key_file else g("ACCOUNTS_APPLE_PRIVATE_KEY")
         return cls(
             env=env, db_path=g("ACCOUNTS_DB", "accounts.db"), secret=(secret or "").encode(),
             engine_url=(g("ACCOUNTS_ENGINE_URL") or None) and g("ACCOUNTS_ENGINE_URL").rstrip("/"),
             engine_key=g("ACCOUNTS_ENGINE_KEY"), token_ttl_s=int(g("ACCOUNTS_TOKEN_TTL_S", "600")),
             token_languages=tuple(x for x in g("ACCOUNTS_TOKEN_LANGUAGES", "").split(",") if x),
             apple_audience=g("ACCOUNTS_APPLE_AUDIENCE"), appattest_app_id=g("ACCOUNTS_APPATTEST_APP_ID"),
+            apple_team_id=g("ACCOUNTS_APPLE_TEAM_ID"), apple_key_id=g("ACCOUNTS_APPLE_KEY_ID"),
+            apple_private_key=apple_key or None,
             appattest_root_pem=Path(root).read_bytes() if root else None,
             appattest_development=g("ACCOUNTS_APPATTEST_DEVELOPMENT") == "1",
             otp_sender=g("ACCOUNTS_OTP_SENDER", "console"), otp_webhook_url=g("ACCOUNTS_OTP_WEBHOOK_URL"),

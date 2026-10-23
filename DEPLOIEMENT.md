@@ -25,6 +25,15 @@ WoYo. **Aucun secret ne s'écrit dans ce dépôt ni dans une conversation** : on
 | `ACCOUNTS_ENGINE_KEY` | clé du tenant (prérequis 2) |
 | `ACCOUNTS_APPLE_AUDIENCE` | déjà réglé : `com.tam.ave` |
 
+**Sign in with Apple — révocation (obligatoire si Apple est activé, exigé par l'App Store)** :
+1. developer.apple.com → Certificates, IDs & Profiles → **Keys** → « + » → nom `AVE Sign in with Apple` → cocher
+   **Sign in with Apple** → Configure → Primary App ID `com.tam.ave` → Save → Continue → Register.
+2. **Télécharger le fichier .p8** (une seule fois possible) et noter le **Key ID** ; l'identifiant d'équipe (Team ID) est en
+   haut à droite du portail.
+3. Render → ave-accounts → Environment → **Secret Files** → nom `apple_signin_key.p8`, contenu = le fichier .p8 ;
+   variables `ACCOUNTS_APPLE_TEAM_ID` et `ACCOUNTS_APPLE_KEY_ID`. Le chemin est déjà réglé (`/etc/secrets/apple_signin_key.p8`).
+Sans ces trois valeurs, le service refuse de démarrer en production tant que Sign in with Apple est activé.
+
 Mode invité (App Attest), facultatif au départ : `ACCOUNTS_APPATTEST_APP_ID=<TEAM_ID>.com.tam.ave` et un **Secret File**
 Render nommé `apple_appattest_root.pem` (racine publique « Apple App Attestation Root CA », téléchargée chez Apple), puis
 `ACCOUNTS_APPATTEST_ROOT_PEM=/etc/secrets/apple_appattest_root.pem`. Sans eux, « Essayer sans compte » répond « non disponible ».

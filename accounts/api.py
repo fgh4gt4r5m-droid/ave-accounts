@@ -6,7 +6,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 
-from .apple import AppleVerifier
+from .apple import AppleTokenClient, AppleVerifier
 from .appattest import AppAttestVerifier
 from .config import Settings
 from .db import Database
@@ -30,6 +30,8 @@ class OTPVerify(BaseModel):
 class AppleBody(BaseModel):
     identity_token: str
     nonce: str
+    # Facultatif (applis antérieures au 2026-10-23) : code d'autorisation Apple, échangé pour pouvoir révoquer plus tard.
+    authorization_code: str | None = None
 
 
 class GuestBody(BaseModel):
@@ -61,9 +63,11 @@ def build_services(settings: Settings) -> Services:
     engine = (EngineTokenClient(settings.engine_url, settings.engine_key)
               if settings.engine_url and settings.engine_key else None)
     apple = AppleVerifier(settings.apple_audience) if settings.apple_audience else None
+    apple_tokens = (AppleTokenClient(settings.apple_audience or "", settings.apple_team_id or "", settings.apple_key_id or "",
+                                     settings.apple_private_key or "") if settings.apple_revocation_ready else None)
     attest = (AppAttestVerifier(settings.appattest_app_id, settings.appattest_root_pem, settings.appattest_development)
               if settings.appattest_app_id and settings.appattest_root_pem else None)
-    return Services(settings, Database(settings.db_path), otp, engine, apple, attest)
+    return Services(settings, Database(settings.db_path), otp, engine, apple, attest, apple_tokens)
 
 
 def create_app(services: Services) -> FastAPI:
@@ -111,7 +115,7 @@ def create_app(services: Services) -> FastAPI:
 
     @app.post("/auth/apple")
     def apple(body: AppleBody):
-        return {"refresh_token": acc.sign_in_apple(body.identity_token, body.nonce)}
+        return {"refresh_token": acc.sign_in_apple(body.identity_token, body.nonce, body.authorization_code)}
 
     @app.post("/auth/guest/challenge")
     def guest_challenge(request: Request):

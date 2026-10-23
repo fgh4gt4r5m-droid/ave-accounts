@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import base64
+import logging
 import re
 import secrets
 import time
@@ -15,8 +16,11 @@ from .db import Database, now
 from .engine import EngineTokenClient, EngineUnavailable
 from .errors import (AccountsError, guest_unsupported, invalid_code, invalid_phone, rejected, too_many, unauthorized,
                      unavailable, wrong_code)
+from .apple import AppleTokenError
 from .otp import OTPDeliveryError, OTPSender
-from .security import equal, hmac_hex, new_token, sha256_hex
+from .security import equal, hmac_hex, new_token, seal, sha256_hex, unseal
+
+log = logging.getLogger("accounts.service")
 
 PHONE_RE = re.compile(r"^\+[1-9][0-9]{7,14}$")
 CODE_RE = re.compile(r"^[0-9]{6}$")
@@ -31,6 +35,7 @@ class Services:
     engine: EngineTokenClient | None
     apple: object | None = None       # AppleVerifier
     attest: object | None = None      # AppAttestVerifier
+    apple_tokens: object | None = None  # AppleTokenClient (échange du code, révocation)
 
 
 class Accounts:
@@ -102,12 +107,23 @@ class Accounts:
 
     # ------------------------------------------------------------------ Apple
 
-    def sign_in_apple(self, identity_token: str, nonce: str) -> str:
+    def sign_in_apple(self, identity_token: str, nonce: str, authorization_code: str | None = None) -> str:
         if self.s.apple is None:
             raise unavailable()
         apple_sub = self.s.apple.verify(identity_token, nonce)
+        # Jeton Apple à révoquer plus tard (suppression du compte). Un échec de l'échange ne bloque PAS la connexion :
+        # le jeton déjà gardé (connexion précédente) reste valable ; il est journalisé pour être vu.
+        apple_refresh = None
+        if authorization_code and self.s.apple_tokens is not None:
+            try:
+                apple_refresh = self.s.apple_tokens.exchange(authorization_code)
+            except AppleTokenError as e:
+                log.warning("échange du code Apple impossible (%s) : révocation à la suppression non garantie", e)
         with self.s.db.transaction() as db:
             account_id = self._account_for(db, "apple_hash", hmac_hex(self.cfg.secret, "apple", apple_sub), kind="apple")
+            if apple_refresh:
+                db.execute("UPDATE accounts SET apple_refresh=? WHERE id=?",
+                           (seal(self.cfg.secret, "apple-refresh", apple_refresh), account_id))
             return self._issue_refresh(db, account_id, "apple")
 
     # ------------------------------------------------------------------ invité
@@ -180,7 +196,8 @@ class Accounts:
         l'identité tant que des données liées à son pseudonyme pourraient subsister."""
         with self.s.db.connect() as db:
             row = self._refresh_row(db, refresh_token)
-            account = db.execute("SELECT id, sub FROM accounts WHERE id=?", (row["account_id"],)).fetchone()
+            account = db.execute("SELECT id, sub, kind, apple_refresh FROM accounts WHERE id=?",
+                                 (row["account_id"],)).fetchone()
         if account["sub"]:  # les invités n'ont pas de `sub` : rien n'a pu être collecté pour eux
             if self.s.engine is None:
                 raise unavailable()
@@ -188,6 +205,19 @@ class Accounts:
                 self.s.engine.erase_subject_learning(account["sub"])
             except EngineUnavailable as e:
                 raise unavailable(e.retry_after_s) from None
+        # Sign in with Apple : révoquer le jeton Apple AVANT d'effacer le compte (App Store, règle 5.1.1(v)). En cas d'échec
+        # le compte est conservé et l'utilisateur peut réessayer (même logique que l'effacement côté moteur, idempotent).
+        if account["apple_refresh"]:
+            token = unseal(self.cfg.secret, "apple-refresh", account["apple_refresh"])
+            if token is not None:
+                if self.s.apple_tokens is None:
+                    raise unavailable()
+                try:
+                    self.s.apple_tokens.revoke(token)
+                except AppleTokenError:
+                    raise unavailable() from None
+            else:
+                log.warning("jeton Apple illisible (secret changé ?) : révocation impossible, compte effacé quand même")
         with self.s.db.transaction() as db:
             db.execute("DELETE FROM accounts WHERE id=?", (account["id"],))  # cascade : jetons longs et usage
 

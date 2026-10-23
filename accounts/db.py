@@ -10,7 +10,7 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS accounts(
   id TEXT PRIMARY KEY, kind TEXT NOT NULL, sub TEXT UNIQUE,
   phone_hash TEXT UNIQUE, apple_hash TEXT UNIQUE, device_key TEXT UNIQUE,
-  created_at INTEGER NOT NULL);
+  created_at INTEGER NOT NULL, apple_refresh TEXT);
 CREATE TABLE IF NOT EXISTS refresh_tokens(
   token_hash TEXT PRIMARY KEY, account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
   expires_at INTEGER NOT NULL, created_at INTEGER NOT NULL);
@@ -33,6 +33,10 @@ class Database:
         self.path = path
         with self.connect() as db:
             db.executescript(SCHEMA)
+            # Bases créées avant la révocation Apple (2026-10-23) : colonne ajoutée sans rien perdre.
+            columns = {row["name"] for row in db.execute("PRAGMA table_info(accounts)")}
+            if "apple_refresh" not in columns:
+                db.execute("ALTER TABLE accounts ADD COLUMN apple_refresh TEXT")
 
     @contextmanager
     def connect(self):

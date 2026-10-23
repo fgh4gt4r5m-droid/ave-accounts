@@ -28,6 +28,12 @@ services:
         sync: false               # clé B2B du tenant « AVE grand public » (tools/make_key.py du moteur)
       - key: ACCOUNTS_APPLE_AUDIENCE
         value: com.tam.ave
+      - key: ACCOUNTS_APPLE_TEAM_ID
+        sync: false               # identifiant d'équipe Apple (10 caractères)
+      - key: ACCOUNTS_APPLE_KEY_ID
+        sync: false               # identifiant de la clé « Sign in with Apple »
+      - key: ACCOUNTS_APPLE_PRIVATE_KEY_FILE
+        value: /etc/secrets/apple_signin_key.p8   # « Secret File » Render : le fichier .p8, jamais dans le dépôt
       - key: ACCOUNTS_OTP_SENDER
         value: providers
       - key: ACCOUNTS_SMS_PROVIDERS
