@@ -138,7 +138,12 @@ class Settings:
             secret = secrets.token_urlsafe(48)  # dev : éphémère, les jetons ne survivent pas à un redémarrage
         root = g("ACCOUNTS_APPATTEST_ROOT_PEM")
         apple_key_file = g("ACCOUNTS_APPLE_PRIVATE_KEY_FILE")
-        apple_key = Path(apple_key_file).read_text() if apple_key_file else g("ACCOUNTS_APPLE_PRIVATE_KEY")
+        # Fichier absent (clé pas encore ajoutée dans Render) : pas de clé. La production le refuse ensuite avec un message
+        # clair (validate) ; la préproduction démarre, et seule la suppression d'un compte Apple répond « indisponible ».
+        if apple_key_file and Path(apple_key_file).is_file():
+            apple_key = Path(apple_key_file).read_text()
+        else:
+            apple_key = g("ACCOUNTS_APPLE_PRIVATE_KEY")
         return cls(
             env=env, db_path=g("ACCOUNTS_DB", "accounts.db"), secret=(secret or "").encode(),
             engine_url=(g("ACCOUNTS_ENGINE_URL") or None) and g("ACCOUNTS_ENGINE_URL").rstrip("/"),

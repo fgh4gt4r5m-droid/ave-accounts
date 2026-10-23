@@ -43,6 +43,17 @@ def test_preview_keeps_production_safeguards(override):
         Settings.from_env({**PREVIEW, **override})
 
 
+def test_missing_apple_key_file(tmp_path):
+    missing = str(tmp_path / "absent.p8")
+    apple = dict(ACCOUNTS_APPLE_AUDIENCE="com.tam.ave", ACCOUNTS_APPLE_TEAM_ID="TEAM", ACCOUNTS_APPLE_KEY_ID="KEY",
+                 ACCOUNTS_APPLE_PRIVATE_KEY_FILE=missing)
+    # Préproduction : démarre, sans révocation possible.
+    assert not Settings.from_env({**PREVIEW, **apple}).apple_revocation_ready
+    # Production : refus clair (révocation exigée par l'App Store), pas un plantage sur le fichier.
+    with pytest.raises(ConfigError, match="révocation"):
+        Settings.from_env({**OK, **apple})
+
+
 def test_unknown_environment_is_refused():
     with pytest.raises(ConfigError):
         Settings.from_env({**PREVIEW, "ACCOUNTS_ENV": "prod"})
