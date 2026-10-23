@@ -7,7 +7,7 @@ Il détient la clé B2B du tenant « AVE grand public » et appelle `POST /v1/to
 Spécification : `contrat/CONTRAT.md` §6 du dépôt `african-voice-engine` (contrat partagé app iOS ↔ moteur ↔ ce service). Les apps hôtes (WoYo, TaGa) n'utilisent pas ce service : leur backend appelle `/v1/token` lui-même.
 
 ```bash
-pip install -e '.[dev]' && python3 -m pytest      # 77 tests, < 3 s
+pip install -e '.[dev]' && python3 -m pytest      # 87 tests, < 5 s
 ACCOUNTS_ENV=dev ACCOUNTS_ENGINE_URL=http://127.0.0.1:8787 ACCOUNTS_ENGINE_KEY=<clé du tenant> python3 -m accounts   # :8790
 ```
 En dev, les codes sont écrits dans le journal (`console`) et le secret est éphémère. **En production** le service refuse de démarrer sans secret
@@ -27,6 +27,8 @@ En dev, les codes sont écrits dans le journal (`console`) et le secret est éph
 | `ACCOUNTS_ENGINE_URL`, `ACCOUNTS_ENGINE_KEY` | moteur AVE et clé B2B du tenant « AVE grand public » (jamais dans le dépôt) |
 | `ACCOUNTS_TOKEN_TTL_S`, `ACCOUNTS_TOKEN_LANGUAGES` | durée (600) et langues du jeton court (restriction seulement) |
 | `ACCOUNTS_OTP_SENDER` = `console`\|`webhook`, `ACCOUNTS_OTP_WEBHOOK_URL`, `_KEY` | envoi des codes ; `webhook` = POST `{to, channel, message}` vers VOTRE passerelle SMS/WhatsApp |
+| `ACCOUNTS_OTP_SENDER=providers` + `ACCOUNTS_WHATSAPP_*`, `ACCOUNTS_ORANGE_*`, `ACCOUNTS_INFOBIP_*`, `ACCOUNTS_SMS_PROVIDERS` | envoi direct : WhatsApp Cloud API (modèle d'authentification `ave_otp`), puis SMS Orange, puis SMS Infobip ; détail dans `DEPLOIEMENT.md` |
+| `ACCOUNTS_OTP_TEST_PHONES`, `ACCOUNTS_OTP_TEST_CODE` | numéros de test à code fixe (revue Apple) : aucun message envoyé ; code de 6 chiffres non évident obligatoire |
 | `ACCOUNTS_APPLE_AUDIENCE` | identifiant (bundle id) de l'app attendu dans le jeton Apple ; absent ⇒ Apple désactivé (503) |
 | `ACCOUNTS_APPATTEST_APP_ID`, `ACCOUNTS_APPATTEST_ROOT_PEM`, `ACCOUNTS_APPATTEST_DEVELOPMENT=1` | invité : `<TEAM_ID>.<BUNDLE_ID>`, fichier PEM de la racine « Apple App Attestation Root CA » (à télécharger chez Apple), AAGUID de développement ; absents ⇒ invité désactivé (403) |
 | `ACCOUNTS_TRUST_PROXY=1` | lire l'IP dans `X-Forwarded-For` (derrière un reverse proxy de confiance uniquement) |
@@ -40,7 +42,7 @@ En dev, les codes sont écrits dans le journal (`console`) et le secret est éph
 - Déconnexion et suppression de compte (cascade : jetons, usage). Pas de documentation d'API exposée.
 
 ## Limites honnêtes (à lire avant toute mise en ligne)
-- **Envoi des codes** : aucun fournisseur SMS/WhatsApp n'est intégré, seulement le port et un adaptateur `webhook` générique. Coût et fiabilité des SMS à évaluer dans la région.
+- **Envoi des codes** : WhatsApp (Meta), Orange et Infobip sont intégrés (2026-10-23) mais testés seulement contre des faux, d'après leur documentation publique ; **aucun envoi réel** n'a encore été fait. Coût et fiabilité à mesurer sur le terrain.
 - **Apple** : la vérification est testée avec des clés locales ; **jamais appelée contre `appleid.apple.com`** depuis l'environnement de développement.
 - **App Attest** : testé avec une chaîne de certificats **synthétique**, pas avec une vraie attestation Apple. À valider sur un appareil réel avec la vraie racine avant d'activer le mode invité. Une clé ne s'atteste qu'une fois et l'app en crée une neuve à chaque essai : la protection contre les invités fabriqués en masse repose sur la limitation par IP et les quotas.
 - **Effacement des données d'apprentissage** : `DELETE /account` appelle d'abord `DELETE /v1/subjects/{sub}/learning` du moteur (clé B2B), puis supprime le compte. Si le moteur échoue ou est injoignable, **le compte est conservé** (503) et l'utilisateur peut réessayer. Cela ne retire pas son apport d'un modèle DÉJÀ entraîné (à dire à l'utilisateur). Nécessite un moteur qui expose cette route (branche `endpoints-sujets` du dépôt du moteur) ; sans elle, la suppression de compte échoue.

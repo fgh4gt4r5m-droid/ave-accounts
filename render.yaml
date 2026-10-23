@@ -1,0 +1,48 @@
+# Blueprint Render du service de comptes AVE (voir DEPLOIEMENT.md). Les valeurs marquées `sync: false` sont SECRÈTES
+# ou propres à votre compte : Render les demande à la création et elles ne sont jamais écrites dans ce dépôt.
+services:
+  - type: web
+    name: ave-accounts
+    runtime: docker
+    plan: starter                 # un disque persistant exige une offre payante
+    region: frankfurt             # la plus proche de l'Afrique de l'Ouest parmi les régions Render
+    branch: main
+    healthCheckPath: /healthz
+    numInstances: 1               # SQLite : un seul processus (PostgreSQL au-delà, voir README.md)
+    disk:
+      name: ave-accounts-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: ACCOUNTS_ENV
+        value: production
+      - key: ACCOUNTS_DB
+        value: /data/accounts.db
+      - key: ACCOUNTS_TRUST_PROXY
+        value: "1"                # derrière le proxy de Render : l'IP réelle est dans X-Forwarded-For
+      - key: ACCOUNTS_SECRET
+        sync: false               # >= 32 caractères aléatoires ; le perdre ou le changer rompt tous les comptes
+      - key: ACCOUNTS_ENGINE_URL
+        sync: false               # https://… du moteur AVE déployé
+      - key: ACCOUNTS_ENGINE_KEY
+        sync: false               # clé B2B du tenant « AVE grand public » (tools/make_key.py du moteur)
+      - key: ACCOUNTS_APPLE_AUDIENCE
+        value: com.tam.ave
+      - key: ACCOUNTS_OTP_SENDER
+        value: providers
+      - key: ACCOUNTS_SMS_PROVIDERS
+        value: orange,infobip
+      - key: ACCOUNTS_WHATSAPP_TOKEN
+        sync: false               # jeton permanent d'utilisateur système Meta (mêmes comptes que WoYo)
+      - key: ACCOUNTS_WHATSAPP_PHONE_NUMBER_ID
+        sync: false
+      - key: ACCOUNTS_WHATSAPP_TEMPLATE
+        value: ave_otp            # modèle d'authentification à faire approuver par Meta
+      - key: ACCOUNTS_ORANGE_CLIENT_ID
+        sync: false
+      - key: ACCOUNTS_ORANGE_CLIENT_SECRET
+        sync: false
+      - key: ACCOUNTS_INFOBIP_BASE_URL
+        sync: false
+      - key: ACCOUNTS_INFOBIP_API_KEY
+        sync: false

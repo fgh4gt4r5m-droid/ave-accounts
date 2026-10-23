@@ -24,9 +24,26 @@ class Settings:
     appattest_app_id: str | None = None        # « <TEAM_ID>.<BUNDLE_ID> »
     appattest_root_pem: bytes | None = None    # certificat racine « Apple App Attestation Root CA »
     appattest_development: bool = False        # accepte l'AAGUID de développement
-    otp_sender: str = "console"                # console (dev) | webhook
+    otp_sender: str = "console"                # console (dev) | webhook | providers
     otp_webhook_url: str | None = None
     otp_webhook_key: str | None = None
+    # providers : WhatsApp Cloud API (Meta), puis SMS dans l'ordre de `sms_providers` (orange, infobip)
+    whatsapp_token: str | None = None
+    whatsapp_phone_number_id: str | None = None
+    whatsapp_template: str = "ave_otp"
+    whatsapp_language: str = "fr"
+    whatsapp_api_version: str = "v21.0"
+    sms_providers: tuple[str, ...] = ("orange", "infobip")
+    orange_client_id: str | None = None
+    orange_client_secret: str | None = None
+    orange_sender_number: str = "2240000"      # Guinée (Orange Developer) ; autre pays : son numéro d'expéditeur
+    orange_sender_name: str | None = None
+    infobip_base_url: str | None = None
+    infobip_api_key: str | None = None
+    infobip_sender: str = "AVE"
+    # Numéros de test à code fixe (revue Apple, essais) : AUCUN par défaut. Ces numéros ne reçoivent jamais de message.
+    otp_test_phones: tuple[str, ...] = ()
+    otp_test_code: str | None = None
     otp_ttl_s: int = 300
     otp_max_attempts: int = 5
     otp_resend_s: int = 30
@@ -53,12 +70,37 @@ class Settings:
             if not self.engine_key:
                 raise ConfigError("production : ACCOUNTS_ENGINE_KEY obligatoire")
             if self.otp_sender == "console":
-                raise ConfigError("production : l'envoi des codes par la console est interdit (ACCOUNTS_OTP_SENDER=webhook)")
+                raise ConfigError("production : l'envoi des codes par la console est interdit "
+                                  "(ACCOUNTS_OTP_SENDER=providers ou webhook)")
         if self.otp_sender == "webhook" and not self.otp_webhook_url:
             raise ConfigError("ACCOUNTS_OTP_WEBHOOK_URL manquant")
-        if self.otp_sender not in ("console", "webhook"):
-            raise ConfigError("ACCOUNTS_OTP_SENDER : console ou webhook")
+        if self.otp_sender not in ("console", "webhook", "providers"):
+            raise ConfigError("ACCOUNTS_OTP_SENDER : console, webhook ou providers")
+        if self.otp_sender == "providers":
+            if not (self.whatsapp_ready or self.orange_ready or self.infobip_ready):
+                raise ConfigError("ACCOUNTS_OTP_SENDER=providers : configurer au moins WhatsApp, Orange ou Infobip")
+            unknown = [p for p in self.sms_providers if p not in ("orange", "infobip")]
+            if unknown:
+                raise ConfigError(f"ACCOUNTS_SMS_PROVIDERS : fournisseur inconnu {unknown}")
+        if self.otp_test_phones:
+            # Un code de test devinable ouvrirait ces comptes à n'importe qui : 6 chiffres, jamais un code évident.
+            if not (self.otp_test_code and len(self.otp_test_code) == 6 and self.otp_test_code.isdigit()):
+                raise ConfigError("ACCOUNTS_OTP_TEST_CODE (6 chiffres) obligatoire avec ACCOUNTS_OTP_TEST_PHONES")
+            if self.otp_test_code in ("000000", "123456", "111111", "654321"):
+                raise ConfigError("ACCOUNTS_OTP_TEST_CODE trop facile à deviner")
         return self
+
+    @property
+    def whatsapp_ready(self) -> bool:
+        return bool(self.whatsapp_token and self.whatsapp_phone_number_id)
+
+    @property
+    def orange_ready(self) -> bool:
+        return bool(self.orange_client_id and self.orange_client_secret)
+
+    @property
+    def infobip_ready(self) -> bool:
+        return bool(self.infobip_base_url and self.infobip_api_key)
 
     @classmethod
     def from_env(cls, environ=os.environ) -> "Settings":
@@ -78,5 +120,17 @@ class Settings:
             appattest_development=g("ACCOUNTS_APPATTEST_DEVELOPMENT") == "1",
             otp_sender=g("ACCOUNTS_OTP_SENDER", "console"), otp_webhook_url=g("ACCOUNTS_OTP_WEBHOOK_URL"),
             otp_webhook_key=g("ACCOUNTS_OTP_WEBHOOK_KEY"),
+            whatsapp_token=g("ACCOUNTS_WHATSAPP_TOKEN"), whatsapp_phone_number_id=g("ACCOUNTS_WHATSAPP_PHONE_NUMBER_ID"),
+            whatsapp_template=g("ACCOUNTS_WHATSAPP_TEMPLATE", "ave_otp"),
+            whatsapp_language=g("ACCOUNTS_WHATSAPP_LANGUAGE", "fr"),
+            whatsapp_api_version=g("ACCOUNTS_WHATSAPP_API_VERSION", "v21.0"),
+            sms_providers=tuple(x.strip() for x in g("ACCOUNTS_SMS_PROVIDERS", "orange,infobip").split(",") if x.strip()),
+            orange_client_id=g("ACCOUNTS_ORANGE_CLIENT_ID"), orange_client_secret=g("ACCOUNTS_ORANGE_CLIENT_SECRET"),
+            orange_sender_number=g("ACCOUNTS_ORANGE_SENDER_NUMBER", "2240000"),
+            orange_sender_name=g("ACCOUNTS_ORANGE_SENDER_NAME") or None,
+            infobip_base_url=g("ACCOUNTS_INFOBIP_BASE_URL"), infobip_api_key=g("ACCOUNTS_INFOBIP_API_KEY"),
+            infobip_sender=g("ACCOUNTS_INFOBIP_SENDER", "AVE"),
+            otp_test_phones=tuple(x.strip() for x in g("ACCOUNTS_OTP_TEST_PHONES", "").split(",") if x.strip()),
+            otp_test_code=g("ACCOUNTS_OTP_TEST_CODE") or None,
             trust_proxy=g("ACCOUNTS_TRUST_PROXY") == "1",
         ).validate()

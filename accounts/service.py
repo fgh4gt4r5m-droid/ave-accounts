@@ -56,10 +56,14 @@ class Accounts:
             if last and now() - last["created_at"] < self.cfg.otp_resend_s:
                 raise too_many(self.cfg.otp_resend_s - (now() - last["created_at"]))
             challenge_id = uuid.uuid4().hex
-            code = f"{secrets.randbelow(10 ** 6):06d}"
+            test_phone = phone in self.cfg.otp_test_phones and self.cfg.otp_test_code is not None
+            # Numéro de test (revue Apple, essais) : code fixe connu, aucun message envoyé. Mêmes limites que les autres.
+            code = self.cfg.otp_test_code if test_phone else f"{secrets.randbelow(10 ** 6):06d}"
             db.execute("INSERT INTO otp_challenges(id, phone_hash, code_hash, expires_at, created_at) VALUES(?,?,?,?,?)",
                        (challenge_id, phone_hash, hmac_hex(self.cfg.secret, "otp", f"{challenge_id}:{code}"),
                         now() + self.cfg.otp_ttl_s, now()))
+        if test_phone:
+            return {"challenge_id": challenge_id, "retry_after_s": self.cfg.otp_resend_s}
         try:
             self.s.otp.send(phone, channel, code)
         except OTPDeliveryError:

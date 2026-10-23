@@ -12,7 +12,8 @@ from .config import Settings
 from .db import Database
 from .engine import EngineTokenClient
 from .errors import AccountsError, unauthorized
-from .otp import ConsoleOTPSender, OTPSender, WebhookOTPSender
+from .otp import (ConsoleOTPSender, FallbackOTPSender, InfobipSMSSender, OrangeSMSSender, OTPSender, WebhookOTPSender,
+                  WhatsAppCloudSender)
 from .service import Accounts, Services
 
 
@@ -37,9 +38,25 @@ class GuestBody(BaseModel):
     challenge: str
 
 
+def build_otp_sender(s: Settings) -> OTPSender:
+    if s.otp_sender == "webhook":
+        return WebhookOTPSender(s.otp_webhook_url or "", s.otp_webhook_key, s.otp_ttl_s)
+    if s.otp_sender == "providers":
+        whatsapp = (WhatsAppCloudSender(s.whatsapp_token or "", s.whatsapp_phone_number_id or "", s.whatsapp_template,
+                                        s.whatsapp_language, s.whatsapp_api_version) if s.whatsapp_ready else None)
+        available = {
+            "orange": (OrangeSMSSender(s.orange_client_id or "", s.orange_client_secret or "", s.orange_sender_number,
+                                       s.orange_sender_name, s.otp_ttl_s) if s.orange_ready else None),
+            "infobip": (InfobipSMSSender(s.infobip_base_url or "", s.infobip_api_key or "", s.infobip_sender, s.otp_ttl_s)
+                        if s.infobip_ready else None),
+        }
+        sms = [(name, sender) for name in s.sms_providers if (sender := available.get(name)) is not None]
+        return FallbackOTPSender(whatsapp, sms)
+    return ConsoleOTPSender(s.otp_ttl_s)
+
+
 def build_services(settings: Settings) -> Services:
-    otp: OTPSender = (WebhookOTPSender(settings.otp_webhook_url or "", settings.otp_webhook_key, settings.otp_ttl_s)
-                      if settings.otp_sender == "webhook" else ConsoleOTPSender(settings.otp_ttl_s))
+    otp = build_otp_sender(settings)
     engine = (EngineTokenClient(settings.engine_url, settings.engine_key)
               if settings.engine_url and settings.engine_key else None)
     apple = AppleVerifier(settings.apple_audience) if settings.apple_audience else None
