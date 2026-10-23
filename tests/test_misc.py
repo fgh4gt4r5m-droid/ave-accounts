@@ -90,3 +90,8 @@ def test_missing_provider_error_names_variables_but_never_values():
     message = str(err.value)
     assert "ACCOUNTS_INFOBIP_API_KEY présente" in message and "ACCOUNTS_INFOBIP_BASE_URL absente" in message
     assert "valeur-secrete-infobip" not in message
+
+
+def test_test_phones_accept_numbers_written_without_plus():
+    s = Settings.from_env({**PREVIEW, "ACCOUNTS_OTP_TEST_PHONES": "224612141424, +224 627 222 121", "ACCOUNTS_OTP_TEST_CODE": "482917"})
+    assert s.otp_test_phones == ("+224612141424", "+224627222121")

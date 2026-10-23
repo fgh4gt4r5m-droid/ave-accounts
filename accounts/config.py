@@ -183,7 +183,10 @@ class Settings:
             orange_sender_name=g("ACCOUNTS_ORANGE_SENDER_NAME") or None,
             infobip_base_url=g("ACCOUNTS_INFOBIP_BASE_URL"), infobip_api_key=g("ACCOUNTS_INFOBIP_API_KEY"),
             infobip_sender=g("ACCOUNTS_INFOBIP_SENDER", "AVE"),
-            otp_test_phones=tuple(x.strip() for x in (g("ACCOUNTS_OTP_TEST_PHONES") or "").split(",") if x.strip()),
+            # Format E.164 (« +224… »), comme les numéros reçus de l'app. Écrit sans « + » (format de taksi-backend), un
+            # numéro de test ne serait pas reconnu et un VRAI SMS partirait : on ajoute le « + » manquant, on retire les espaces.
+            otp_test_phones=tuple("+" + x.strip().replace(" ", "").lstrip("+")
+                                  for x in (g("ACCOUNTS_OTP_TEST_PHONES") or "").split(",") if x.strip()),
             otp_test_code=g("ACCOUNTS_OTP_TEST_CODE") or None,
             trust_proxy=g("ACCOUNTS_TRUST_PROXY") == "1",
         ).validate()
