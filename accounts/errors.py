@@ -11,6 +11,8 @@ class AccountsError(Exception):
 
 
 def invalid_phone() -> AccountsError: return AccountsError(400, "invalid_phone")
+def invalid_name() -> AccountsError: return AccountsError(400, "invalid_name")
+def bad_request() -> AccountsError: return AccountsError(400, "bad_request")
 def invalid_code() -> AccountsError: return AccountsError(400, "invalid_code")
 def wrong_code() -> AccountsError: return AccountsError(400, "wrong_code")
 def rejected() -> AccountsError: return AccountsError(401, "rejected")  # identifiants refusés (Apple, attestation)

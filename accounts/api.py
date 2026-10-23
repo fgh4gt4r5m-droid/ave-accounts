@@ -34,6 +34,12 @@ class AppleBody(BaseModel):
     authorization_code: str | None = None
 
 
+class ProfileBody(BaseModel):
+    full_name: str | None = None
+    terms_version: str | None = None
+    adult_confirmed: bool | None = None
+
+
 class GuestBody(BaseModel):
     key_id: str
     attestation: str
@@ -133,6 +139,14 @@ def create_app(services: Services) -> FastAPI:
     def signout(authorization: str | None = Header(default=None)):
         acc.sign_out(bearer(authorization))
         return Response(status_code=204)
+
+    @app.get("/account/profile")
+    def get_profile(authorization: str | None = Header(default=None)):
+        return acc.profile(bearer(authorization))
+
+    @app.patch("/account/profile")
+    def patch_profile(body: ProfileBody, authorization: str | None = Header(default=None)):
+        return acc.update_profile(bearer(authorization), body.full_name, body.terms_version, body.adult_confirmed)
 
     @app.delete("/account", status_code=204)
     def delete_account(authorization: str | None = Header(default=None)):

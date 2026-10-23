@@ -6,6 +6,7 @@ import logging
 import re
 import secrets
 import time
+import unicodedata
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -14,8 +15,8 @@ from . import ratelimit
 from .config import Settings
 from .db import Database, now
 from .engine import EngineTokenClient, EngineUnavailable
-from .errors import (AccountsError, guest_unsupported, invalid_code, invalid_phone, rejected, too_many, unauthorized,
-                     unavailable, wrong_code)
+from .errors import (AccountsError, bad_request, guest_unsupported, invalid_code, invalid_name, invalid_phone, rejected,
+                     too_many, unauthorized, unavailable, wrong_code)
 from .apple import AppleTokenError
 from .otp import OTPDeliveryError, OTPSender
 from .security import equal, hmac_hex, new_token, seal, sha256_hex, unseal
@@ -23,6 +24,8 @@ from .security import equal, hmac_hex, new_token, seal, sha256_hex, unseal
 log = logging.getLogger("accounts.service")
 
 PHONE_RE = re.compile(r"^\+[1-9][0-9]{7,14}$")
+TERMS_VERSION_RE = re.compile(r"^[A-Za-z0-9._-]{1,32}$")
+NAME_MAX = 80
 CODE_RE = re.compile(r"^[0-9]{6}$")
 CHANNELS = ("sms", "whatsapp")
 
@@ -185,6 +188,51 @@ class Accounts:
             db.execute("INSERT INTO token_usage(account_id, day, count) VALUES(?,?,1) "
                        "ON CONFLICT(account_id, day) DO UPDATE SET count=count+1", (account_id, day))
         return {"token": token, "expires_in": expires_in}
+
+    # ------------------------------------------------------------------ profil
+
+    def profile(self, refresh_token: str) -> dict:
+        """Nom complet, conditions acceptées, âge confirmé : relus à la reconnexion (réinstallation, autre iPhone), pour ne
+        pas redemander ce qui a déjà été donné."""
+        with self.s.db.connect() as db:
+            row = self._refresh_row(db, refresh_token)
+            account = db.execute("SELECT full_name, terms_version, terms_accepted_at, adult_confirmed_at FROM accounts "
+                                 "WHERE id=?", (row["account_id"],)).fetchone()
+        return self._profile_body(account)
+
+    def update_profile(self, refresh_token: str, full_name: str | None = None, terms_version: str | None = None,
+                       adult_confirmed: bool | None = None) -> dict:
+        """Champs absents : inchangés. Le nom est CHIFFRÉ (il faut pouvoir le relire ; jamais journalisé). Accepter des
+        conditions note leur version et la date ; l'âge ne se confirme qu'à vrai (on ne « dé-confirme » pas)."""
+        updates: dict[str, object] = {}
+        if full_name is not None:
+            name = " ".join(full_name.split())  # espaces superflus et retours à la ligne retirés
+            if not name or len(name) > NAME_MAX or any(unicodedata.category(c) in ("Cc", "Cf", "Co", "Cs") for c in name):
+                raise invalid_name()
+            updates["full_name"] = seal(self.cfg.secret, "full-name", name)
+        if terms_version is not None:
+            if not TERMS_VERSION_RE.match(terms_version):
+                raise bad_request()
+            updates["terms_version"] = terms_version
+            updates["terms_accepted_at"] = now()
+        if adult_confirmed is not None:
+            if adult_confirmed is not True:
+                raise bad_request()
+            updates["adult_confirmed_at"] = now()
+        with self.s.db.transaction() as db:
+            row = self._refresh_row(db, refresh_token)
+            if updates:
+                assignments = ", ".join(f"{column}=?" for column in updates)  # noms de colonnes fixes, jamais reçus
+                db.execute(f"UPDATE accounts SET {assignments} WHERE id=?", (*updates.values(), row["account_id"]))
+            account = db.execute("SELECT full_name, terms_version, terms_accepted_at, adult_confirmed_at FROM accounts "
+                                 "WHERE id=?", (row["account_id"],)).fetchone()
+        return self._profile_body(account)
+
+    def _profile_body(self, account) -> dict:
+        name = unseal(self.cfg.secret, "full-name", account["full_name"]) if account["full_name"] else None
+        return {"full_name": name, "terms_version": account["terms_version"],
+                "terms_accepted_at": account["terms_accepted_at"],
+                "adult_confirmed": account["adult_confirmed_at"] is not None}
 
     def sign_out(self, refresh_token: str) -> None:
         with self.s.db.transaction() as db:

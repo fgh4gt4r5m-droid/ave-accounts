@@ -33,10 +33,14 @@ class Database:
         self.path = path
         with self.connect() as db:
             db.executescript(SCHEMA)
-            # Bases créées avant la révocation Apple (2026-10-23) : colonne ajoutée sans rien perdre.
+            # Colonnes ajoutées après la création des premières bases : ajoutées sans rien perdre.
+            # apple_refresh : révocation Apple (2026-10-23) ; profil (2026-10-23) : nom complet CHIFFRÉ, version des
+            # conditions acceptées et dates d'acceptation et de confirmation de l'âge.
             columns = {row["name"] for row in db.execute("PRAGMA table_info(accounts)")}
-            if "apple_refresh" not in columns:
-                db.execute("ALTER TABLE accounts ADD COLUMN apple_refresh TEXT")
+            for name, kind in (("apple_refresh", "TEXT"), ("full_name", "TEXT"), ("terms_version", "TEXT"),
+                               ("terms_accepted_at", "INTEGER"), ("adult_confirmed_at", "INTEGER")):
+                if name not in columns:
+                    db.execute(f"ALTER TABLE accounts ADD COLUMN {name} {kind}")
 
     @contextmanager
     def connect(self):

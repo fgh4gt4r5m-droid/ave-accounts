@@ -15,7 +15,7 @@ En dev, les codes sont écrits dans le journal (`console`) et le secret est éph
 
 ## Routes
 `POST /auth/otp/request` · `/auth/otp/verify` · `/auth/apple` · `/auth/guest/challenge` · `/auth/guest` · `/auth/token` (Bearer) · `/auth/signout` (Bearer, 204) ·
-`DELETE /account` (Bearer, 204) · `GET /healthz`. Erreurs : `{error, retry_after_s?}` ; 400 `invalid_phone|invalid_code|wrong_code|bad_request`, 401 `unauthorized` (jeton long) ou
+`DELETE /account` (Bearer, 204) · `GET /account/profile` et `PATCH /account/profile` (Bearer) · `GET /healthz`. Erreurs : `{error, retry_after_s?}` ; 400 `invalid_phone|invalid_code|wrong_code|bad_request`, 401 `unauthorized` (jeton long) ou
 `rejected` (identifiants refusés), 403 `guest_unsupported`, 429 `too_many_attempts|quota_exceeded` (+ `Retry-After`), 503 `unavailable`.
 
 ## Configuration (variables d'environnement)
@@ -46,6 +46,7 @@ En dev, les codes sont écrits dans le journal (`console`) et le secret est éph
 - **Envoi des codes** : WhatsApp (Meta), Orange et Infobip sont intégrés (2026-10-23) mais testés seulement contre des faux, d'après leur documentation publique ; **aucun envoi réel** n'a encore été fait. Coût et fiabilité à mesurer sur le terrain.
 - **Apple** : la vérification est testée avec des clés locales ; **jamais appelée contre `appleid.apple.com`** depuis l'environnement de développement.
 - **App Attest** : testé avec une chaîne de certificats **synthétique**, pas avec une vraie attestation Apple. À valider sur un appareil réel avec la vraie racine avant d'activer le mode invité. Une clé ne s'atteste qu'une fois et l'app en crée une neuve à chaque essai : la protection contre les invités fabriqués en masse repose sur la limitation par IP et les quotas.
+- **Profil (2026-10-23, entrée validée par le propriétaire)** : `PATCH /account/profile {full_name?, terms_version?, adult_confirmed?}` → `{full_name, terms_version, terms_accepted_at, adult_confirmed}` ; `GET` relit le même corps. Le nom complet (1 à 80 caractères, espaces superflus retirés, sans caractère invisible : sinon 400 `invalid_name`) est **chiffré** comme le jeton Apple et jamais journalisé ; accepter des conditions note leur version (`[A-Za-z0-9._-]{1,32}`) et la date ; l'âge (18 ans ou plus) ne se confirme qu'à `true`. Champ absent : inchangé. Relu à chaque connexion : une réinstallation ne redemande rien. Effacé avec le compte.
 - **Effacement des données d'apprentissage** : `DELETE /account` appelle d'abord `DELETE /v1/subjects/{sub}/learning` du moteur (clé B2B), puis supprime le compte. Si le moteur échoue ou est injoignable, **le compte est conservé** (503) et l'utilisateur peut réessayer. Cela ne retire pas son apport d'un modèle DÉJÀ entraîné (à dire à l'utilisateur). Nécessite un moteur qui expose cette route (branche `endpoints-sujets` du dépôt du moteur) ; sans elle, la suppression de compte échoue.
 - **Moteur limité** : `/v1/token` et `/v1/subjects` répondent 429 + `Retry-After` (30 d'avance puis 1/s). Le service réessaie au plus 2 fois, seulement pour une attente ≤ 3 s, sinon renvoie 503 avec `retry_after_s` ; il ne boucle jamais.
 - SQLite et un seul processus conviennent pour démarrer ; PostgreSQL au-delà. Sauvegardes, rotation du secret, observabilité : non faites.
