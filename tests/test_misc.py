@@ -23,6 +23,31 @@ def test_production_config_refuses_unsafe_setups(override):
         Settings.from_env({**OK, **override})
 
 
+PREVIEW = dict(ACCOUNTS_ENV="preview", ACCOUNTS_SECRET="x" * 40, ACCOUNTS_OTP_SENDER="webhook",
+               ACCOUNTS_OTP_WEBHOOK_URL="https://sms.example/send")
+
+
+def test_preview_starts_without_engine():
+    s = Settings.from_env(dict(PREVIEW))
+    assert s.hosted and not s.production and s.engine_url is None
+
+
+@pytest.mark.parametrize("override", [
+    dict(ACCOUNTS_SECRET=""), dict(ACCOUNTS_OTP_SENDER="console"),
+    dict(ACCOUNTS_ENGINE_URL="http://ave.example", ACCOUNTS_ENGINE_KEY="cle"),
+    dict(ACCOUNTS_ENGINE_URL="https://ave.example"), dict(ACCOUNTS_ENGINE_KEY="cle"),
+], ids=["sans-secret", "console", "moteur-http", "url-sans-cle", "cle-sans-url"])
+def test_preview_keeps_production_safeguards(override):
+    # Pas de secret éphémère hors développement : il romprait tous les comptes au premier redémarrage.
+    with pytest.raises(ConfigError):
+        Settings.from_env({**PREVIEW, **override})
+
+
+def test_unknown_environment_is_refused():
+    with pytest.raises(ConfigError):
+        Settings.from_env({**PREVIEW, "ACCOUNTS_ENV": "prod"})
+
+
 def test_dev_gets_an_ephemeral_secret_but_a_short_explicit_one_is_refused():
     s = Settings.from_env({})
     assert len(s.secret) >= 32 and not s.production

@@ -15,7 +15,7 @@ services:
       sizeGB: 1
     envVars:
       - key: ACCOUNTS_ENV
-        value: production
+        value: preview            # préproduction : démarre sans moteur ; passer à production quand le moteur est en ligne
       - key: ACCOUNTS_DB
         value: /data/accounts.db
       - key: ACCOUNTS_TRUST_PROXY
@@ -23,9 +23,9 @@ services:
       - key: ACCOUNTS_SECRET
         sync: false               # >= 32 caractères aléatoires ; le perdre ou le changer rompt tous les comptes
       - key: ACCOUNTS_ENGINE_URL
-        sync: false               # https://… du moteur AVE déployé
+        sync: false               # https://… du moteur AVE déployé (laisser VIDE tant qu'il ne l'est pas)
       - key: ACCOUNTS_ENGINE_KEY
-        sync: false               # clé B2B du tenant « AVE grand public » (tools/make_key.py du moteur)
+        sync: false               # clé B2B du tenant « AVE grand public » (VIDE tant que le moteur ne l'est pas)
       - key: ACCOUNTS_APPLE_AUDIENCE
         value: com.tam.ave
       - key: ACCOUNTS_APPLE_TEAM_ID

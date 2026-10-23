@@ -13,7 +13,10 @@ class ConfigError(Exception):
 
 @dataclass(frozen=True)
 class Settings:
-    env: str = "dev"                          # dev | production
+    # dev | preview | production. `preview` (préproduction, 2026-10-23) : hébergé et aussi strict que la production
+    # (secret fixe, vrais envois de codes) mais SANS moteur, pour éprouver la connexion avant le déploiement du moteur.
+    # Sans moteur, /auth/token répond `engine_unavailable` (503) : l'app ne prétend pas parler au moteur.
+    env: str = "dev"
     db_path: str = "accounts.db"
     secret: bytes = b""                        # HMAC (pseudonymes, empreintes, codes) : >= 32 octets
     engine_url: str | None = None              # https://… du moteur AVE
@@ -66,7 +69,14 @@ class Settings:
     def production(self) -> bool:
         return self.env == "production"
 
+    @property
+    def hosted(self) -> bool:
+        """Service en ligne (préproduction ou production) : de vrais numéros, donc les mêmes protections."""
+        return self.env in ("preview", "production")
+
     def validate(self) -> "Settings":
+        if self.env not in ("dev", "preview", "production"):
+            raise ConfigError("ACCOUNTS_ENV : dev, preview ou production")
         if len(self.secret) < 32:
             raise ConfigError("ACCOUNTS_SECRET (>= 32 caractères) est obligatoire : aucun secret par défaut")
         if self.production:
@@ -77,8 +87,13 @@ class Settings:
             if self.apple_audience and not self.apple_revocation_ready:
                 raise ConfigError("production : Sign in with Apple activé sans révocation (ACCOUNTS_APPLE_TEAM_ID, "
                                   "ACCOUNTS_APPLE_KEY_ID, ACCOUNTS_APPLE_PRIVATE_KEY_FILE) : exigé par l'App Store")
+        if self.hosted:
+            if self.engine_url and not self.engine_url.startswith("https://"):
+                raise ConfigError(f"{self.env} : ACCOUNTS_ENGINE_URL doit être en https://")
+            if bool(self.engine_url) != bool(self.engine_key):
+                raise ConfigError(f"{self.env} : ACCOUNTS_ENGINE_URL et ACCOUNTS_ENGINE_KEY vont ensemble")
             if self.otp_sender == "console":
-                raise ConfigError("production : l'envoi des codes par la console est interdit "
+                raise ConfigError(f"{self.env} : l'envoi des codes par la console est interdit "
                                   "(ACCOUNTS_OTP_SENDER=providers ou webhook)")
         if self.otp_sender == "webhook" and not self.otp_webhook_url:
             raise ConfigError("ACCOUNTS_OTP_WEBHOOK_URL manquant")
@@ -119,7 +134,7 @@ class Settings:
         g = environ.get
         env = g("ACCOUNTS_ENV", "dev")
         secret = g("ACCOUNTS_SECRET")
-        if not secret and env != "production":
+        if not secret and env == "dev":
             secret = secrets.token_urlsafe(48)  # dev : éphémère, les jetons ne survivent pas à un redémarrage
         root = g("ACCOUNTS_APPATTEST_ROOT_PEM")
         apple_key_file = g("ACCOUNTS_APPLE_PRIVATE_KEY_FILE")

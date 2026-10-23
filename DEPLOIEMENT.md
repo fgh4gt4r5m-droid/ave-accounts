@@ -3,7 +3,17 @@
 Rédigé le 2026-10-23. Même compte Render que WoYo (`taksi-backend`), mais un **service séparé** : rien n'est modifié côté
 WoYo. **Aucun secret ne s'écrit dans ce dépôt ni dans une conversation** : on les colle directement dans Render.
 
-## 0. Prérequis (bloquants)
+## Préproduction d'abord (`ACCOUNTS_ENV=preview`, réglage du blueprint depuis le 2026-10-23)
+Pour éprouver tout le parcours de connexion (vrai code par WhatsApp ou SMS, comptes réels) AVANT le déploiement du moteur :
+le service démarre sans moteur, avec les mêmes protections que la production (secret fixe obligatoire, codes jamais
+dans les journaux). `ACCOUNTS_ENGINE_URL` et `ACCOUNTS_ENGINE_KEY` restent VIDES. Ce qui ne marche pas encore, et le dit :
+- `/auth/token` répond `unavailable` (503) : aucun jeton de conversation sans moteur. Le build de démonstration de l'app
+  converse alors avec son moteur de démo hors ligne, signalé à l'écran ;
+- supprimer un compte téléphone ou Apple répond `unavailable` (effacement côté moteur, révocation Apple sans clé) ;
+- l'invité (App Attest) n'est pas configuré.
+Quand le moteur est en ligne : renseigner les deux valeurs du moteur, la révocation Apple (§2), puis `ACCOUNTS_ENV=production`.
+
+## 0. Prérequis de la PRODUCTION (bloquants)
 1. **Le moteur AVE est déployé** à une adresse `https://…` (WebSocket `wss://…/v1/stream`). En production, ce service
    **refuse de démarrer** sans lui : c'est le moteur qui délivre les jetons courts. Il relève de l'autre session.
 2. **La clé du tenant « AVE grand public »**, générée avec l'outil du moteur :
