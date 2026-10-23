@@ -40,7 +40,7 @@ Quand le moteur est en ligne : renseigner les deux valeurs du moteur, la révoca
 ## 2. Valeurs à saisir dans Render (Environment)
 | Variable | Valeur |
 |---|---|
-| `ACCOUNTS_SECRET` | 64 caractères aléatoires. Sur Windows (PowerShell) : `[Convert]::ToBase64String((1..48 \| % { Get-Random -Max 256 }) -as [byte[]])`. **À garder** : le perdre ou le changer rompt tous les comptes. |
+| `ACCOUNTS_SECRET` | 64 caractères aléatoires, tirés par le générateur cryptographique (pas `Get-Random`, prévisible). Sur Windows (PowerShell) : `$b = New-Object byte[] 48; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); [Convert]::ToBase64String($b)`. **À garder** : le perdre ou le changer rompt tous les comptes. |
 | `ACCOUNTS_ENGINE_URL` | `https://…` du moteur |
 | `ACCOUNTS_ENGINE_KEY` | clé du tenant (prérequis 2) |
 | `ACCOUNTS_APPLE_AUDIENCE` | déjà réglé : `com.tam.ave` |
