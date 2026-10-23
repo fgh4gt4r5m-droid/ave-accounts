@@ -29,21 +29,30 @@ Mode invité (App Attest), facultatif au départ : `ACCOUNTS_APPATTEST_APP_ID=<T
 Render nommé `apple_appattest_root.pem` (racine publique « Apple App Attestation Root CA », téléchargée chez Apple), puis
 `ACCOUNTS_APPATTEST_ROOT_PEM=/etc/secrets/apple_appattest_root.pem`. Sans eux, « Essayer sans compte » répond « non disponible ».
 
-## 3. Envoi des codes (WhatsApp, puis SMS Orange, puis SMS Infobip)
-Ordre : canal WhatsApp choisi dans l'app → WhatsApp, et en cas d'échec les SMS ; canal SMS → Orange puis Infobip
-(`ACCOUNTS_SMS_PROVIDERS`). Un fournisseur non configuré est simplement sauté.
+## 3. Envoi des codes : les mêmes fournisseurs que taksi-backend (vérifié le 2026-10-23)
+Copie de la logique de `taksi-backend` (`src/auth/auth.service.ts`, `main` du 2026-10-23), éprouvée en production chez TAM :
+canal WhatsApp → WhatsApp, puis SMS ; SMS → **Orange Guinée** pour un numéro `+224` (100 à 200 GNF, tous opérateurs, 3 SMS
+par jour au plus au même numéro), puis **Infobip** (`/sms/2/text/advanced`) ; un numéro étranger saute Orange.
+Les valeurs sont celles déjà posées sur le service Render de taksi-backend : les recopier dans le service `ave-accounts`
+(Render → taksi-backend → Environment, puis ave-accounts → Environment). Correspondance des noms :
 
-- **WhatsApp (Meta Cloud API)** — mêmes comptes Meta que WoYo :
-  - Business Manager → WhatsApp → Modèles : créer un modèle **Authentification**, nom **`ave_otp`**, langue **Français**,
-    bouton **« Copier le code »** ; attendre l'approbation de Meta.
-  - `ACCOUNTS_WHATSAPP_TOKEN` (jeton permanent d'un utilisateur système) et `ACCOUNTS_WHATSAPP_PHONE_NUMBER_ID`.
-  - ⚠️ Le message part du compte WhatsApp Business existant : il s'affichera sous le nom **WOYO** tant qu'AVE n'a pas son
-    propre numéro WhatsApp Business.
-- **SMS Orange** (Orange Developer, API « SMS » Afrique) : `ACCOUNTS_ORANGE_CLIENT_ID`, `ACCOUNTS_ORANGE_CLIENT_SECRET`
-  (MyApps) ; expéditeur Guinée `2240000` par défaut ; `ACCOUNTS_ORANGE_SENDER_NAME` seulement si Orange a validé un nom
-  (11 caractères max). Le contrat doit avoir un solde positif.
-- **SMS Infobip** (repli, comme WoYo) : `ACCOUNTS_INFOBIP_BASE_URL` (`https://xxxxx.api.infobip.com`, portail Infobip),
-  `ACCOUNTS_INFOBIP_API_KEY` (droit `sms:message:send`), `ACCOUNTS_INFOBIP_SENDER` (défaut `AVE`).
+| taksi-backend | ave-accounts | Remarque |
+|---|---|---|
+| `WHATSAPP_TOKEN` | `ACCOUNTS_WHATSAPP_TOKEN` | même compte Meta |
+| `WHATSAPP_PHONE_ID` | `ACCOUNTS_WHATSAPP_PHONE_NUMBER_ID` | même numéro WhatsApp Business |
+| `WHATSAPP_OTP_TEMPLATE` (`woyo_otp`) | `ACCOUNTS_WHATSAPP_TEMPLATE` (`ave_otp`) | **nouveau modèle à créer** (voir ci-dessous) |
+| `ORANGE_SMS_AUTH_HEADER` | `ACCOUNTS_ORANGE_AUTH_HEADER` | ou `ACCOUNTS_ORANGE_CLIENT_ID` + `_SECRET` |
+| `ORANGE_SMS_SENDER` | `ACCOUNTS_ORANGE_SENDER` | défaut `tel:+2240000` |
+| `ORANGE_SMS_SENDER_NAME` | `ACCOUNTS_ORANGE_SENDER_NAME` | **laisser vide** : le nom accordé est « WOYO » ; un nom non accordé fait refuser l'envoi |
+| `INFOBIP_BASE_URL`, `INFOBIP_API_KEY` | `ACCOUNTS_INFOBIP_BASE_URL`, `ACCOUNTS_INFOBIP_API_KEY` | |
+| `INFOBIP_SENDER` | `ACCOUNTS_INFOBIP_SENDER` | défaut `AVE` (à vérifier auprès d'Infobip ; sinon le numéro fourni) |
+
+- **Modèle WhatsApp `ave_otp`** : Business Manager → WhatsApp → Modèles → catégorie **Authentification**, langue **Français**,
+  bouton **« Copier le code »** ; attendre l'approbation de Meta. Tant qu'il n'est pas approuvé, WhatsApp refuse (erreur
+  132001) et le code part par SMS. ⚠️ Le message part du numéro WhatsApp Business existant, donc sous le nom **WOYO**.
+- **Quotas partagés** : la règle d'Orange (3 SMS par jour au même numéro) est comptée séparément par taksi-backend et par
+  ce service. Une personne qui utilise WoYo ET AVE le même jour peut donc dépasser la règle côté Orange : Orange refusera
+  alors et Infobip prendra le relais. Utiliser le même contrat Orange pour un second service : à confirmer avec Orange Guinée.
 
 ## 4. Numéro de démonstration pour la revue Apple
 `ACCOUNTS_OTP_TEST_PHONES=+224…` (un ou plusieurs, séparés par des virgules) et `ACCOUNTS_OTP_TEST_CODE` = 6 chiffres
@@ -57,8 +66,8 @@ dans « Informations pour la revue ». Les retirer si inutiles.
   `AVE_ENDPOINT=wss://…/v1/stream` (moteur), et lancer `ave-testflight`.
 
 ## Ce qui n'est PAS éprouvé (honnêteté)
-- Les trois envois suivent la documentation publique de Meta, Orange et Infobip et sont testés contre des faux ; **aucun
-  n'a encore été appelé pour de vrai**. Premier essai : sur un numéro de l'équipe, en regardant les journaux Render.
-- Le format exact du bouton « Copier le code » de Meta varie selon les sources : à confirmer au premier envoi réel.
+- Les trois envois reprennent les requêtes de taksi-backend (éprouvées en production chez TAM) et sont testés contre des
+  faux ; **depuis ce service, aucun n'a encore été appelé pour de vrai**. Premier essai : sur un numéro de l'équipe, en
+  regardant les journaux Render.
 - Image Docker non construite ici (pas de Docker sur le poste) : Render la construira au premier déploiement.
 - Sauvegarde de la base SQLite : non faite (disque Render seulement). À prévoir avant d'avoir de vrais utilisateurs.

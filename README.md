@@ -7,7 +7,7 @@ Il détient la clé B2B du tenant « AVE grand public » et appelle `POST /v1/to
 Spécification : `contrat/CONTRAT.md` §6 du dépôt `african-voice-engine` (contrat partagé app iOS ↔ moteur ↔ ce service). Les apps hôtes (WoYo, TaGa) n'utilisent pas ce service : leur backend appelle `/v1/token` lui-même.
 
 ```bash
-pip install -e '.[dev]' && python3 -m pytest      # 87 tests, < 5 s
+pip install -e '.[dev]' && python3 -m pytest      # 90 tests, < 5 s
 ACCOUNTS_ENV=dev ACCOUNTS_ENGINE_URL=http://127.0.0.1:8787 ACCOUNTS_ENGINE_KEY=<clé du tenant> python3 -m accounts   # :8790
 ```
 En dev, les codes sont écrits dans le journal (`console`) et le secret est éphémère. **En production** le service refuse de démarrer sans secret
@@ -27,7 +27,7 @@ En dev, les codes sont écrits dans le journal (`console`) et le secret est éph
 | `ACCOUNTS_ENGINE_URL`, `ACCOUNTS_ENGINE_KEY` | moteur AVE et clé B2B du tenant « AVE grand public » (jamais dans le dépôt) |
 | `ACCOUNTS_TOKEN_TTL_S`, `ACCOUNTS_TOKEN_LANGUAGES` | durée (600) et langues du jeton court (restriction seulement) |
 | `ACCOUNTS_OTP_SENDER` = `console`\|`webhook`, `ACCOUNTS_OTP_WEBHOOK_URL`, `_KEY` | envoi des codes ; `webhook` = POST `{to, channel, message}` vers VOTRE passerelle SMS/WhatsApp |
-| `ACCOUNTS_OTP_SENDER=providers` + `ACCOUNTS_WHATSAPP_*`, `ACCOUNTS_ORANGE_*`, `ACCOUNTS_INFOBIP_*`, `ACCOUNTS_SMS_PROVIDERS` | envoi direct : WhatsApp Cloud API (modèle d'authentification `ave_otp`), puis SMS Orange, puis SMS Infobip ; détail dans `DEPLOIEMENT.md` |
+| `ACCOUNTS_OTP_SENDER=providers` + `ACCOUNTS_WHATSAPP_*`, `ACCOUNTS_ORANGE_*`, `ACCOUNTS_INFOBIP_*`, `ACCOUNTS_SMS_PROVIDERS` | envoi direct, même logique que taksi-backend : WhatsApp Cloud API (modèle d'authentification `ave_otp`), puis SMS Orange Guinée (numéros +224, 3 par jour), puis SMS Infobip (`/sms/2/text/advanced`) ; détail et correspondance des variables dans `DEPLOIEMENT.md` |
 | `ACCOUNTS_OTP_TEST_PHONES`, `ACCOUNTS_OTP_TEST_CODE` | numéros de test à code fixe (revue Apple) : aucun message envoyé ; code de 6 chiffres non évident obligatoire |
 | `ACCOUNTS_APPLE_AUDIENCE` | identifiant (bundle id) de l'app attendu dans le jeton Apple ; absent ⇒ Apple désactivé (503) |
 | `ACCOUNTS_APPATTEST_APP_ID`, `ACCOUNTS_APPATTEST_ROOT_PEM`, `ACCOUNTS_APPATTEST_DEVELOPMENT=1` | invité : `<TEAM_ID>.<BUNDLE_ID>`, fichier PEM de la racine « Apple App Attestation Root CA » (à télécharger chez Apple), AAGUID de développement ; absents ⇒ invité désactivé (403) |

@@ -34,9 +34,10 @@ class Settings:
     whatsapp_language: str = "fr"
     whatsapp_api_version: str = "v21.0"
     sms_providers: tuple[str, ...] = ("orange", "infobip")
+    orange_auth_header: str | None = None      # « Basic … » donné tout prêt par Orange (prioritaire sur id + secret)
     orange_client_id: str | None = None
     orange_client_secret: str | None = None
-    orange_sender_number: str = "2240000"      # Guinée (Orange Developer) ; autre pays : son numéro d'expéditeur
+    orange_sender_number: str = "tel:+2240000" # adresse d'expéditeur de l'API Orange Guinée
     orange_sender_name: str | None = None
     infobip_base_url: str | None = None
     infobip_api_key: str | None = None
@@ -96,7 +97,7 @@ class Settings:
 
     @property
     def orange_ready(self) -> bool:
-        return bool(self.orange_client_id and self.orange_client_secret)
+        return bool(self.orange_auth_header or (self.orange_client_id and self.orange_client_secret))
 
     @property
     def infobip_ready(self) -> bool:
@@ -125,8 +126,9 @@ class Settings:
             whatsapp_language=g("ACCOUNTS_WHATSAPP_LANGUAGE", "fr"),
             whatsapp_api_version=g("ACCOUNTS_WHATSAPP_API_VERSION", "v21.0"),
             sms_providers=tuple(x.strip() for x in g("ACCOUNTS_SMS_PROVIDERS", "orange,infobip").split(",") if x.strip()),
+            orange_auth_header=g("ACCOUNTS_ORANGE_AUTH_HEADER") or None,
             orange_client_id=g("ACCOUNTS_ORANGE_CLIENT_ID"), orange_client_secret=g("ACCOUNTS_ORANGE_CLIENT_SECRET"),
-            orange_sender_number=g("ACCOUNTS_ORANGE_SENDER_NUMBER", "2240000"),
+            orange_sender_number=g("ACCOUNTS_ORANGE_SENDER", "tel:+2240000"),
             orange_sender_name=g("ACCOUNTS_ORANGE_SENDER_NAME") or None,
             infobip_base_url=g("ACCOUNTS_INFOBIP_BASE_URL"), infobip_api_key=g("ACCOUNTS_INFOBIP_API_KEY"),
             infobip_sender=g("ACCOUNTS_INFOBIP_SENDER", "AVE"),

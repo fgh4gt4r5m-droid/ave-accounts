@@ -38,6 +38,8 @@ services:
         sync: false
       - key: ACCOUNTS_WHATSAPP_TEMPLATE
         value: ave_otp            # modèle d'authentification à faire approuver par Meta
+      - key: ACCOUNTS_ORANGE_AUTH_HEADER
+        sync: false               # « Basic … » tout prêt d'Orange (= ORANGE_SMS_AUTH_HEADER de taksi-backend) ; OU les deux suivants
       - key: ACCOUNTS_ORANGE_CLIENT_ID
         sync: false
       - key: ACCOUNTS_ORANGE_CLIENT_SECRET

@@ -49,26 +49,32 @@ def test_whatsapp_error_is_a_delivery_error():
         WhatsAppCloudSender("t", "1", "ave_otp", client=client).send(PHONE, "whatsapp", CODE)
 
 
-def test_infobip_sms_v3_request():
-    seen, client = recorder([(200, {"messages": [{"messageId": "m1"}]})])
-    InfobipSMSSender("https://abc123.api.infobip.com/", "cle-infobip", "AVE", ttl_s=300, client=client).send(
-        PHONE, "sms", CODE)
+def test_infobip_sms_v2_request_like_taksi_backend():
+    seen, client = recorder([(200, {"messages": [{"messageId": "m1", "status": {"groupName": "PENDING"}}]})])
+    InfobipSMSSender("abc123.api.infobip.com", " cle-infobip ", "AVE", ttl_s=300, client=client).send(PHONE, "sms", CODE)
     req = seen[0]
-    assert str(req.url) == "https://abc123.api.infobip.com/sms/3/messages"
+    assert str(req.url) == "https://abc123.api.infobip.com/sms/2/text/advanced"
     assert req.headers["Authorization"] == "App cle-infobip"
     msg = json.loads(req.content)["messages"][0]
-    assert msg["sender"] == "AVE" and msg["destinations"] == [{"to": PHONE[1:]}]
-    assert CODE in msg["content"]["text"] and "5 minutes" in msg["content"]["text"]
+    assert msg["from"] == "AVE" and msg["destinations"] == [{"to": PHONE[1:]}]
+    assert CODE in msg["text"] and "5 minutes" in msg["text"]
+
+
+def test_infobip_rejection_inside_a_2xx_is_a_failure():
+    _, client = recorder([(200, {"messages": [{"status": {"groupName": "REJECTED"}}]})])
+    with pytest.raises(OTPDeliveryError):
+        InfobipSMSSender("https://x.api.infobip.com/", "k", "AVE", client=client).send(PHONE, "sms", CODE)
 
 
 def test_orange_token_then_sms_with_encoded_sender_and_token_reuse():
     seen, client = recorder([(200, {"access_token": "tok1", "expires_in": "3600"}), (201, {}), (201, {})])
     now = [1000.0]
-    sender = OrangeSMSSender("id", "secret", "2240000", "AVE", client=client, clock=lambda: now[0])
+    sender = OrangeSMSSender(" id ", "sec ret", "tel:+2240000", "AVE", client=client, clock=lambda: now[0])
     sender.send(PHONE, "sms", CODE)
     sender.send(PHONE, "sms", CODE)
     token_req, sms_req, sms_req2 = seen  # un seul jeton pour deux envois
     assert str(token_req.url) == "https://api.orange.com/oauth/v3/token"
+    # Espaces retirés partout (le secret copié depuis la page d'Orange en contenait, constaté chez TAM).
     assert token_req.headers["Authorization"] == "Basic " + base64.b64encode(b"id:secret").decode()
     assert token_req.content == b"grant_type=client_credentials"
     assert str(sms_req.url) == "https://api.orange.com/smsmessaging/v1/outbound/tel%3A%2B2240000/requests"
@@ -93,6 +99,27 @@ def test_orange_token_renewed_when_expired_and_after_a_401_but_never_loops():
     with pytest.raises(OTPDeliveryError):           # 401, nouveau jeton d, encore 401 : on abandonne
         sender.send(PHONE, "sms", CODE)
     assert "senderName" not in json.loads(seen[1].content)["outboundSMSMessageRequest"]
+
+
+def test_orange_ready_made_header_guinea_only_and_three_per_day():
+    seen, client = recorder([(200, {"access_token": "t", "expires_in": 3600})] + [(201, {})] * 3)
+    sender = OrangeSMSSender(None, None, "2240000", client=client, auth_header="Basic  QUJD REVG ")
+    assert seen == [] and not sender.supports("+33612345678") and sender.supports(PHONE)
+    with pytest.raises(OTPDeliveryError):
+        sender.send("+33612345678", "sms", CODE)      # étranger : jamais envoyé par Orange
+    assert seen == []
+    for _ in range(3):
+        sender.send(PHONE, "sms", CODE)
+    assert seen[0].headers["Authorization"] == "Basic QUJDREVG"
+    with pytest.raises(OTPDeliveryError):
+        sender.send(PHONE, "sms", CODE)               # 4e SMS du jour au même numéro : refusé avant tout appel
+    assert len(seen) == 4
+
+
+def test_fallback_skips_orange_for_a_foreign_number():
+    orange, infobip = OrangeSMSSender(None, None, "2240000", auth_header="Basic x"), Stub("infobip")
+    FallbackOTPSender(None, [("orange", orange), ("infobip", infobip)]).send("+33612345678", "sms", CODE)
+    assert infobip.calls == ["sms"]
 
 
 class Stub:

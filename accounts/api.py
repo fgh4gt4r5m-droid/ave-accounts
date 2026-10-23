@@ -45,8 +45,9 @@ def build_otp_sender(s: Settings) -> OTPSender:
         whatsapp = (WhatsAppCloudSender(s.whatsapp_token or "", s.whatsapp_phone_number_id or "", s.whatsapp_template,
                                         s.whatsapp_language, s.whatsapp_api_version) if s.whatsapp_ready else None)
         available = {
-            "orange": (OrangeSMSSender(s.orange_client_id or "", s.orange_client_secret or "", s.orange_sender_number,
-                                       s.orange_sender_name, s.otp_ttl_s) if s.orange_ready else None),
+            "orange": (OrangeSMSSender(s.orange_client_id, s.orange_client_secret, s.orange_sender_number,
+                                       s.orange_sender_name, s.otp_ttl_s, auth_header=s.orange_auth_header)
+                       if s.orange_ready else None),
             "infobip": (InfobipSMSSender(s.infobip_base_url or "", s.infobip_api_key or "", s.infobip_sender, s.otp_ttl_s)
                         if s.infobip_ready else None),
         }
