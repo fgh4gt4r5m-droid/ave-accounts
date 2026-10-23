@@ -73,3 +73,20 @@ def test_rate_limit_window(tmp_path):
         wait = ratelimit.hit(c, "k", 2, 60)
         assert wait is not None and 1 <= wait <= 60
         assert ratelimit.hit(c, "autre", 2, 60) is None
+
+
+def test_pasted_values_are_trimmed_and_blank_counts_as_absent():
+    # Copier-coller depuis un autre service : retour à la ligne en fin de valeur, champ laissé avec un espace.
+    s = Settings.from_env({**PREVIEW, "ACCOUNTS_OTP_SENDER": "providers", "ACCOUNTS_INFOBIP_BASE_URL": "https://x.api.infobip.com\n",
+                           "ACCOUNTS_INFOBIP_API_KEY": "  cle-infobip  ", "ACCOUNTS_ORANGE_AUTH_HEADER": "   "})
+    assert s.infobip_base_url == "https://x.api.infobip.com" and s.infobip_api_key == "cle-infobip"
+    assert s.orange_auth_header is None and not s.orange_ready
+
+
+def test_missing_provider_error_names_variables_but_never_values():
+    env = {**PREVIEW, "ACCOUNTS_OTP_SENDER": "providers", "ACCOUNTS_INFOBIP_API_KEY": "valeur-secrete-infobip"}
+    with pytest.raises(ConfigError) as err:
+        Settings.from_env(env)
+    message = str(err.value)
+    assert "ACCOUNTS_INFOBIP_API_KEY présente" in message and "ACCOUNTS_INFOBIP_BASE_URL absente" in message
+    assert "valeur-secrete-infobip" not in message

@@ -101,7 +101,8 @@ class Settings:
             raise ConfigError("ACCOUNTS_OTP_SENDER : console, webhook ou providers")
         if self.otp_sender == "providers":
             if not (self.whatsapp_ready or self.orange_ready or self.infobip_ready):
-                raise ConfigError("ACCOUNTS_OTP_SENDER=providers : configurer au moins WhatsApp, Orange ou Infobip")
+                raise ConfigError("ACCOUNTS_OTP_SENDER=providers : configurer au moins WhatsApp, Orange ou Infobip. "
+                                  "Variables vues : " + self.provider_presence())
             unknown = [p for p in self.sms_providers if p not in ("orange", "infobip")]
             if unknown:
                 raise ConfigError(f"ACCOUNTS_SMS_PROVIDERS : fournisseur inconnu {unknown}")
@@ -129,9 +130,24 @@ class Settings:
     def infobip_ready(self) -> bool:
         return bool(self.infobip_base_url and self.infobip_api_key)
 
+    def provider_presence(self) -> str:
+        """Quelles variables des fournisseurs sont renseignées : NOMS seulement, jamais les valeurs (journal de démarrage).
+        Ajouté le 2026-10-23 : sur Render, le propriétaire ne voyait pas laquelle manquait."""
+        fields = [("ACCOUNTS_WHATSAPP_TOKEN", self.whatsapp_token),
+                  ("ACCOUNTS_WHATSAPP_PHONE_NUMBER_ID", self.whatsapp_phone_number_id),
+                  ("ACCOUNTS_ORANGE_AUTH_HEADER", self.orange_auth_header),
+                  ("ACCOUNTS_ORANGE_CLIENT_ID", self.orange_client_id),
+                  ("ACCOUNTS_ORANGE_CLIENT_SECRET", self.orange_client_secret),
+                  ("ACCOUNTS_INFOBIP_BASE_URL", self.infobip_base_url),
+                  ("ACCOUNTS_INFOBIP_API_KEY", self.infobip_api_key)]
+        return ", ".join(f"{name} {'présente' if value else 'absente'}" for name, value in fields)
+
     @classmethod
     def from_env(cls, environ=os.environ) -> "Settings":
-        g = environ.get
+        def g(name: str, default: str | None = None) -> str | None:
+            # Un copier-coller ajoute souvent un espace ou un retour à la ligne en bout de valeur : on les retire. Une valeur
+            # vide ou faite d'espaces compte comme absente (la valeur par défaut s'applique).
+            return (environ.get(name) or "").strip() or default
         env = g("ACCOUNTS_ENV", "dev")
         secret = g("ACCOUNTS_SECRET")
         if not secret and env == "dev":
@@ -146,9 +162,9 @@ class Settings:
             apple_key = g("ACCOUNTS_APPLE_PRIVATE_KEY")
         return cls(
             env=env, db_path=g("ACCOUNTS_DB", "accounts.db"), secret=(secret or "").encode(),
-            engine_url=(g("ACCOUNTS_ENGINE_URL") or None) and g("ACCOUNTS_ENGINE_URL").rstrip("/"),
+            engine_url=(g("ACCOUNTS_ENGINE_URL") or "").rstrip("/") or None,
             engine_key=g("ACCOUNTS_ENGINE_KEY"), token_ttl_s=int(g("ACCOUNTS_TOKEN_TTL_S", "600")),
-            token_languages=tuple(x for x in g("ACCOUNTS_TOKEN_LANGUAGES", "").split(",") if x),
+            token_languages=tuple(x.strip() for x in (g("ACCOUNTS_TOKEN_LANGUAGES") or "").split(",") if x.strip()),
             apple_audience=g("ACCOUNTS_APPLE_AUDIENCE"), appattest_app_id=g("ACCOUNTS_APPATTEST_APP_ID"),
             apple_team_id=g("ACCOUNTS_APPLE_TEAM_ID"), apple_key_id=g("ACCOUNTS_APPLE_KEY_ID"),
             apple_private_key=apple_key or None,
@@ -160,14 +176,14 @@ class Settings:
             whatsapp_template=g("ACCOUNTS_WHATSAPP_TEMPLATE", "ave_otp"),
             whatsapp_language=g("ACCOUNTS_WHATSAPP_LANGUAGE", "fr"),
             whatsapp_api_version=g("ACCOUNTS_WHATSAPP_API_VERSION", "v21.0"),
-            sms_providers=tuple(x.strip() for x in g("ACCOUNTS_SMS_PROVIDERS", "orange,infobip").split(",") if x.strip()),
+            sms_providers=tuple(x.strip() for x in (g("ACCOUNTS_SMS_PROVIDERS") or "orange,infobip").split(",") if x.strip()),
             orange_auth_header=g("ACCOUNTS_ORANGE_AUTH_HEADER") or None,
             orange_client_id=g("ACCOUNTS_ORANGE_CLIENT_ID"), orange_client_secret=g("ACCOUNTS_ORANGE_CLIENT_SECRET"),
             orange_sender_number=g("ACCOUNTS_ORANGE_SENDER", "tel:+2240000"),
             orange_sender_name=g("ACCOUNTS_ORANGE_SENDER_NAME") or None,
             infobip_base_url=g("ACCOUNTS_INFOBIP_BASE_URL"), infobip_api_key=g("ACCOUNTS_INFOBIP_API_KEY"),
             infobip_sender=g("ACCOUNTS_INFOBIP_SENDER", "AVE"),
-            otp_test_phones=tuple(x.strip() for x in g("ACCOUNTS_OTP_TEST_PHONES", "").split(",") if x.strip()),
+            otp_test_phones=tuple(x.strip() for x in (g("ACCOUNTS_OTP_TEST_PHONES") or "").split(",") if x.strip()),
             otp_test_code=g("ACCOUNTS_OTP_TEST_CODE") or None,
             trust_proxy=g("ACCOUNTS_TRUST_PROXY") == "1",
         ).validate()
